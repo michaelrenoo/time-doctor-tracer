@@ -28,11 +28,15 @@
 *.map
 *.m
 *.png
+.DS_Store
 
 # Eclipse CDT project files
 .cproject
 .project
 .settings/
+
+# STM32 for VSCode
+.vscode/
 
 # Vagrant directory
 .vagrant/

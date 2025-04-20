@@ -1,0 +1,5 @@
+/Users/michaelreno/Desktop/Git/time-doctor-tracer/CMakeFiles/FreRTOS_3Tasks.dir
+/Users/michaelreno/Desktop/Git/time-doctor-tracer/CMakeFiles/edit_cache.dir
+/Users/michaelreno/Desktop/Git/time-doctor-tracer/CMakeFiles/rebuild_cache.dir
+/Users/michaelreno/Desktop/Git/time-doctor-tracer/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+/Users/michaelreno/Desktop/Git/time-doctor-tracer/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir

@@ -27,7 +27,6 @@
 # Misc
 *.map
 *.m
-*.png
 .DS_Store
 
 # Eclipse CDT project files

@@ -40,6 +40,10 @@ To filter tasks, based on the order the tasks occured:
 python3 viewer2.py logfile --filter 1,2,3
 ```
 
+#### Example:
+
+![TimeDoctor Viewer example](/viewer_example.png "Viewer Example")
+
 # TODOs
 - Improve README with more info on TimeDoctor and tracing tool
 - Maybe include explanation on how to incorporate the tracing tool on other FreeRTOS projects

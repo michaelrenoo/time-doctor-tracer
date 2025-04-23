@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include "tracer.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -117,6 +118,15 @@ int __io_putchar(int ch) {
 	while( !(USART2->ISR & USART_ISR_TXE) );
 	USART2->TDR = ch;
 	return ch;
+}
+
+/**
+  * @brief  This function calls tracer_dump() to dump the trace logs from tracer.h
+  * @param None
+  * @retval None
+  */
+void trigger_trace_dump(void) {
+  tracer_dump();
 }
 
 #pragma GCC push_options
@@ -672,6 +682,7 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
+  trigger_trace_dump();  // Dump trace logs on error
   __disable_irq();
   while (1)
   {

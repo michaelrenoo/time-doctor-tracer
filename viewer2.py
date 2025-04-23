@@ -1,7 +1,6 @@
 import argparse
-import plotly.express as px
+import plotly.graph_objects as go
 import pandas as pd
-from datetime import timedelta
 
 # the log file contains timestamps and a task numbers that is scheduled in
 #     3 SC 32000000
@@ -64,36 +63,55 @@ if args.filter:
 
 df = pd.DataFrame(events)
 
-df["Start (ms)"] = df["Start (ms)"].apply(lambda x: float(x) if isinstance(x, (int, float, timedelta)) else x)
-df["End (ms)"] = df["End (ms)"].apply(lambda x: float(x) if isinstance(x, (int, float, timedelta)) else x)
-df["Duration (ms)"] = df["Duration (ms)"].apply(lambda x: float(x.total_seconds() * 1000) if isinstance(x, timedelta) else float(x))
+df["Start (ms)"] = df["Start (ms)"].astype(float)
+df["End (ms)"] = df["End (ms)"].astype(float)
+df["Duration (ms)"] = df["Duration (ms)"].astype(float)
 
+# TODO: Automate this, or just randomly select colors for all tasks
 task_colors = {
-    "Task 1": "rgb(255, 99, 132)",  # Red
-    "Task 2": "rgb(54, 162, 235)",  # Blue
-    "Task 3": "rgb(75, 192, 192)",  # Green
+    "defaultTask": "rgb(255, 99, 132)",  # Red
+    "myTaskA": "rgb(54, 162, 235)",      # Blue
+    "myTaskB": "rgb(75, 192, 192)",      # Green
+    "myTaskC": "rgb(255, 206, 86)",      # Yellow
+    "IDLE": "rgb(153, 102, 255)",        # Purple
+    "Tmr Svc": "rgb(255, 159, 64)"       # Orange
 }
 
-fig = px.timeline(
-    df,
-    x_start="Start (ms)",
-    x_end="End (ms)",
-    y="Task Name",
-    hover_data=["Duration (ms)"],
-    title="FreeRTOS Task Timeline",
-    color_discrete_map=task_colors
-)
+# https://plotly.com/python/graph-objects/
+# Use graph objects instead of express
+fig = go.Figure()
+
+# Separate tasks by name and then plot them
+unique_tasks = df["Task Name"].unique()
+for i, task in enumerate(unique_tasks):
+    task_df = df[df["Task Name"] == task]
+    color = task_colors.get(task, f"hsl({i*360/len(unique_tasks)}, 70%, 50%)")
+    
+    for _, row in task_df.iterrows():
+        fig.add_trace(go.Bar(
+            x=[row["End (ms)"] - row["Start (ms)"]],
+            y=[row["Task Name"]],
+            orientation='h',
+            base=row["Start (ms)"],
+            marker_color=color,
+            name=task,
+            hoverinfo="text",
+            hovertext=f"Task: {task}<br>Duration: {row['Duration (ms)']} ms<br>Start: {row['Start (ms)']} ms<br>End: {row['End (ms)']} ms",
+            showlegend=False
+        ))
 
 max_time = df["End (ms)"].max()
-
 fig.update_layout(
+    title="TimeDoctor Time Viewer",
     xaxis_title="Time (ms)",
     yaxis_title="Tasks",
-    showlegend=False,
+    barmode='overlay',
     bargap=0.2,
     plot_bgcolor='white',
-    height=400 + 20 * len(set(df["Task ID"])),
-    xaxis=dict(range=[0, max_time]),
+    height=400 + 50 * len(unique_tasks),
+    xaxis=dict(range=[0, max_time], type='linear'),
+    yaxis=dict(categoryorder='array', categoryarray=unique_tasks),
+    margin=dict(l=100, r=50, t=50, b=50)
 )
 
 fig.show()

@@ -92,7 +92,9 @@ const osMessageQueueAttr_t myQueueC_attributes = {
   .name = "myQueueC"
 };
 /* USER CODE BEGIN PV */
-
+// Buffer for UART
+uint8_t uart_rx_buffer[32];
+volatile uint8_t uart_rx_index = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -118,6 +120,49 @@ int __io_putchar(int ch) {
 	while( !(USART2->ISR & USART_ISR_TXE) );
 	USART2->TDR = ch;
 	return ch;
+}
+
+/**
+ * @brief Start UART reception in interrupt mode
+ * Call this during initialization to enable command processing
+ * @param None
+ * @retval None
+ */
+void start_uart_reception(void) {
+  HAL_UART_Receive_IT(&huart2, &uart_rx_buffer[uart_rx_index], 1);
+}
+
+/**
+ * @brief Process received UART commands
+ * - "DUMP" - Save trace data to flash
+ * - "GET" - Retrieve trace data from flash
+ */
+void process_uart_command(void) {
+  uart_rx_buffer[uart_rx_index] = '\0';
+  
+  // Check for DUMP command
+  if (strncmp((char*)uart_rx_buffer, "DUMP", 4) == 0) {
+      const char* msg = "Dumping trace data to flash...\r\n";
+      HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+      
+      tracer_dump_to_flash();
+      
+      msg = "Trace data saved to flash\r\n";
+      HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+  }
+
+  // Check for GET command
+  else if (strncmp((char*)uart_rx_buffer, "GET", 3) == 0) {
+      const char* msg = "Retrieving trace data from flash...\r\n";
+      HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+      
+      tracer_retrieve_logs();
+      
+      msg = "\r\nTrace data transfer completed\r\n";
+      HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+  }
+  
+  uart_rx_index = 0;
 }
 
 /**
@@ -179,6 +224,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   HAL_TIM_Base_Start(&htim2);
+  start_uart_reception();
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -675,6 +721,31 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 }
 
 /**
+ * @brief UART reception callback
+ * This is called by the HAL when a character is received over UART
+ * @param huart: UART handle
+ */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+  if (huart->Instance == USART2) {
+      if (uart_rx_buffer[uart_rx_index] == '\r' || uart_rx_buffer[uart_rx_index] == '\n') {
+          if (uart_rx_index > 0) {
+              process_uart_command();
+          }
+      }
+      else {
+          uart_rx_index++;
+          
+          // Check for buffer overflow
+          if (uart_rx_index >= sizeof(uart_rx_buffer) - 1) {
+              uart_rx_index = 0;  // Reset buffer
+          }
+      }
+      
+      HAL_UART_Receive_IT(&huart2, &uart_rx_buffer[uart_rx_index], 1);
+  }
+}
+
+/**
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
@@ -683,6 +754,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   trigger_trace_dump();  // Dump trace logs on error
+  tracer_dump_to_flash();  // Save trace logs to flash
   __disable_irq();
   while (1)
   {

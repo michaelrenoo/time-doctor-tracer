@@ -47,6 +47,8 @@
 /* Section where include file can be added */
 #include "main.h"
 #include "tracer.h"
+
+#define configUSE_STATS_FORMATTING_FUNCTIONS 1  // To enable vTaskList() and vTaskGetRunTimeStats()
 #define configRECORD_STACK_HIGH_ADDRESS 1
 #define configGENERATE_RUN_TIME_STATS 1
 #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() (TIM2->CNT=0)
@@ -174,6 +176,9 @@ standard names. */
 
 /* USER CODE BEGIN Defines */
 /* Section where parameter definitions can be added (for instance, to override default ones in FreeRTOS.h) */
+#define traceTASK_CREATE(pxNewTCB) tracer_TASK_CREATE(pxNewTCB->uxTCBNumber, pxNewTCB->pcTaskName);
+#define traceTASK_SWITCHED_IN() tracer_TASK_SWITCHED_IN(pxCurrentTCB->uxTCBNumber);
+#define traceTASK_SWITCHED_OUT() tracer_TASK_SWITCHED_OUT(pxCurrentTCB->uxTCBNumber);
 /* USER CODE END Defines */
 
 #endif /* FREERTOS_CONFIG_H */

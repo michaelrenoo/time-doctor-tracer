@@ -33,6 +33,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define MAIN_DEBUG 1  // Set to 0 to disable debug messages
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -95,6 +96,14 @@ const osMessageQueueAttr_t myQueueC_attributes = {
 // Buffer for UART
 uint8_t uart_rx_buffer[32];
 volatile uint8_t uart_rx_index = 0;
+
+// Tracer task variables
+osThreadId_t tracerTaskHandle;
+const osThreadAttr_t tracerTask_attributes = {
+  .name = "tracerTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -129,7 +138,17 @@ int __io_putchar(int ch) {
  * @retval None
  */
 void start_uart_reception(void) {
+  #if MAIN_DEBUG
+    const char* msg = "UART reception initialized\r\n";
+    HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+  #endif
+
   HAL_UART_Receive_IT(&huart2, &uart_rx_buffer[uart_rx_index], 1);
+
+  #if MAIN_DEBUG
+    const char* msg1 = "UART receive started\r\n";
+    HAL_UART_Transmit(&huart2, (uint8_t*)msg1, strlen(msg1), HAL_MAX_DELAY);
+  #endif
 }
 
 /**
@@ -140,38 +159,80 @@ void start_uart_reception(void) {
 void process_uart_command(void) {
   uart_rx_buffer[uart_rx_index] = '\0';
   
-  // Check for DUMP command
-  if (strncmp((char*)uart_rx_buffer, "DUMP", 4) == 0) {
-      const char* msg = "Dumping trace data to flash...\r\n";
-      HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
-      
-      tracer_dump_to_flash();
-      
-      msg = "Trace data saved to flash\r\n";
-      HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
-  }
+  #if MAIN_DEBUG
+    // For debugging
+    char debug_msg[50];
+    snprintf(debug_msg, sizeof(debug_msg), "Received command: %s\r\n", uart_rx_buffer);
+    HAL_UART_Transmit(&huart2, (uint8_t*)debug_msg, strlen(debug_msg), HAL_MAX_DELAY);
+  #endif
 
-  // Check for GET command
-  else if (strncmp((char*)uart_rx_buffer, "GET", 3) == 0) {
-      const char* msg = "Retrieving trace data from flash...\r\n";
+  if (strncmp((char*)uart_rx_buffer, "TEST", 4) == 0) {
+      #if MAIN_DEBUG
+        const char* msg = "TEST command received successfully\r\n";
+        HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+      #endif
+  }
+  // Dump command - force immediate send of trace data
+  else if (strncmp((char*)uart_rx_buffer, "DUMP", 4) == 0) {
+    #if MAIN_DEBUG
+      const char* msg = "DUMP command: Sending all pending trace events\r\n";
       HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
-      
-      tracer_retrieve_logs();
-      
-      msg = "\r\nTrace data transfer completed\r\n";
-      HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+    #endif
+
+    tracer_send_events();
+  }
+  // Status command
+  else if (strncmp((char*)uart_rx_buffer, "STATUS", 6) == 0) {
+    #if MAIN_DEBUG
+      char status_msg[150];
+      snprintf(status_msg, sizeof(status_msg), 
+      "Trace status:\r\n"
+      "Events in buffer: %lu/%d\r\n"
+      "Hook calls: %lu\r\n"
+      "Events sent: %lu\r\n",
+      trace_count, TRACE_BUFFER_SIZE, 
+      trace_hook_calls, sent_events);
+      HAL_UART_Transmit(&huart2, (uint8_t*)status_msg, strlen(status_msg), HAL_MAX_DELAY);
+    #endif
   }
   
   uart_rx_index = 0;
 }
 
 /**
-  * @brief  This function calls tracer_dump() to dump the trace logs from tracer.h
-  * @param None
-  * @retval None
-  */
-void trigger_trace_dump(void) {
-  tracer_dump();
+* @brief Function implementing the tracerTask thread.
+* @param argument: Not used
+* @retval None
+*/
+void StartTracerTask(void *argument) {
+     // Small delay to let system initialize
+    osDelay(500);
+    
+    #if MAIN_DEBUG
+      const char* msg = "\r\n----- TRACER STARTING -----\r\n";
+      HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+    #endif
+    
+    // Initialize the tracer
+    tracer_init();
+
+    // Debug buffer status
+    tracer_debug_buffer();
+    
+    #if MAIN_DEBUG
+      // Clear separator before binary data starts
+      msg = "\r\n----- BINARY DATA FOLLOWS -----\r\n";
+      HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+    #endif
+    
+    // Main loop
+    for(;;) {
+        // Process trace data - this will handle sending events
+        tracer_process();
+        
+        // Delay 10ms between processing cycles
+        osDelay(10);
+    }
 }
 
 #pragma GCC push_options
@@ -271,6 +332,10 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+  tracerTaskHandle = osThreadNew(StartTracerTask, NULL, &tracerTask_attributes);
+  if (tracerTaskHandle == NULL) {
+    Error_Handler();
+  }
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -620,6 +685,16 @@ void StartDefaultTask(void *argument)
 void StartTaskA(void *argument)
 {
   /* USER CODE BEGIN StartTaskA */
+  #if MAIN_DEBUG
+    /* Force a trace event for testing */
+    tracer_TASK_SWITCHED_IN(1); // Manually call with task ID 1
+    
+    /* Print debug */
+    char debug[50];
+    snprintf(debug, sizeof(debug), "TaskA: Called trace hook manually\r\n");
+    HAL_UART_Transmit(&huart2, (uint8_t*)debug, strlen(debug), HAL_MAX_DELAY);
+  #endif
+
   /* Infinite loop */
 	  HAL_TIM_Base_Start_IT(&htim1);
   for(;;)
@@ -644,6 +719,16 @@ void StartTaskA(void *argument)
 void StartTaskB(void *argument)
 {
   /* USER CODE BEGIN StartTaskB */
+  #if MAIN_DEBUG
+    /* Force a trace event for testing */
+    tracer_TASK_SWITCHED_IN(2); // Manually call with task ID 1
+    
+    /* Print debug */
+    char debug[50];
+    snprintf(debug, sizeof(debug), "TaskB: Called trace hook manually\r\n");
+    HAL_UART_Transmit(&huart2, (uint8_t*)debug, strlen(debug), HAL_MAX_DELAY);
+  #endif
+
   /* Infinite loop */
 	  HAL_TIM_Base_Start_IT(&htim15);
   for(;;)
@@ -668,6 +753,16 @@ void StartTaskB(void *argument)
 void StartTaskC(void *argument)
 {
   /* USER CODE BEGIN StartTaskC */
+  #if MAIN_DEBUG
+    /* Force a trace event for testing */
+    tracer_TASK_SWITCHED_IN(3); // Manually call with task ID 1
+    
+    /* Print debug */
+    char debug[50];
+    snprintf(debug, sizeof(debug), "TaskC: Called trace hook manually\r\n");
+    HAL_UART_Transmit(&huart2, (uint8_t*)debug, strlen(debug), HAL_MAX_DELAY);
+  #endif
+
   /* Infinite loop */
 	  HAL_TIM_Base_Start_IT(&htim16);
   for(;;)
@@ -727,6 +822,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
   if (huart->Instance == USART2) {
+    #if MAIN_DEBUG
+      const char* msg = "Character received\r\n";
+      HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+    #endif
+
       if (uart_rx_buffer[uart_rx_index] == '\r' || uart_rx_buffer[uart_rx_index] == '\n') {
           if (uart_rx_index > 0) {
               process_uart_command();
@@ -746,6 +846,24 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 }
 
 /**
+  * @brief  UART transmission complete callback
+  * @param  huart: UART handle
+  * @retval None
+  */
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+  if (huart->Instance == USART2) {
+    #if MAIN_DEBUG
+      const char* cb_msg = "TX complete callback\r\n";
+      HAL_UART_Transmit(&huart2, (uint8_t*)cb_msg, strlen(cb_msg), HAL_MAX_DELAY);
+    #endif
+    
+    // Mark UART as free for tracer
+    extern volatile uint8_t uart_busy;
+    uart_busy = 0;
+  }
+}
+
+/**
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
@@ -753,8 +871,14 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
-  trigger_trace_dump();  // Dump trace logs on error
-  tracer_dump_to_flash();  // Save trace logs to flash
+  #if MAIN_DEBUG
+    const char* msg = "ERROR: System error occurred!\r\n";
+    HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+  #endif
+  
+  // Send all remaining trace data
+  tracer_process();
+  
   __disable_irq();
   while (1)
   {

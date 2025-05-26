@@ -44,5 +44,10 @@
 !Makefile
 *~
 
+# Python cache
+__pycache__/
+# Python bytecode
+*.pyc
+
 # Libraries
 /lib

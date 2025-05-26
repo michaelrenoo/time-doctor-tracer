@@ -49,21 +49,27 @@ class MainWindow:
     
     def setup_ui(self):
         """Set up the user interface."""
-        # Configure the grid layout
         self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=3)  # Main frame
+        self.root.rowconfigure(1, weight=0)  # Status bar
         
         # Create main frame
         main_frame = ttk.Frame(self.root)
         main_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-        main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(0, weight=1)
         
-        # Create the plot area
-        self.fig, self.ax = plt.subplots(figsize=(10, 6))
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(0, weight=3)  # Plot area
+        main_frame.rowconfigure(1, weight=0)  # Toolbar
+        main_frame.rowconfigure(2, weight=0)  # Control panel
+        main_frame.rowconfigure(3, weight=1)  # Notebook area
+        
+        self.fig, self.ax = plt.subplots(figsize=(10, 5))
         self.canvas = FigureCanvasTkAgg(self.fig, master=main_frame)
         self.canvas_widget = self.canvas.get_tk_widget()
-        self.canvas_widget.grid(row=0, column=0, sticky="nsew")
+        self.canvas_widget.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
+        
+        # Fixed minimum height for canvas
+        self.canvas_widget.config(height=300)
         
         # Initialize plot manager
         self.plot_manager = PlotManager(self.ax, self.data_manager)
@@ -91,27 +97,25 @@ class MainWindow:
         control_pane.add(time_filter_frame, weight=1)
         
         # Time filter controls
-        ttk.Label(time_filter_frame, text="Start:").grid(row=0, column=0, padx=2, pady=5)
+        ttk.Label(time_filter_frame, text="Start:").grid(row=0, column=0, padx=2, pady=2)
         self.time_start_var = tk.StringVar()
-        ttk.Entry(time_filter_frame, width=10, textvariable=self.time_start_var).grid(row=0, column=1, padx=2, pady=5)
+        ttk.Entry(time_filter_frame, width=10, textvariable=self.time_start_var).grid(row=0, column=1, padx=2, pady=2)
         
-        ttk.Label(time_filter_frame, text="End:").grid(row=0, column=2, padx=2, pady=5)
+        ttk.Label(time_filter_frame, text="End:").grid(row=0, column=2, padx=2, pady=2)
         self.time_end_var = tk.StringVar()
-        ttk.Entry(time_filter_frame, width=10, textvariable=self.time_end_var).grid(row=0, column=3, padx=2, pady=5)
+        ttk.Entry(time_filter_frame, width=10, textvariable=self.time_end_var).grid(row=0, column=3, padx=2, pady=2)
         
-        ttk.Button(time_filter_frame, text="Apply", command=self.apply_time_filter).grid(row=0, column=4, padx=2, pady=5)
-        ttk.Button(time_filter_frame, text="Reset", command=self.reset_time_filter).grid(row=0, column=5, padx=2, pady=5)
+        ttk.Button(time_filter_frame, text="Apply", command=self.apply_time_filter).grid(row=0, column=4, padx=2, pady=2)
+        ttk.Button(time_filter_frame, text="Reset", command=self.reset_time_filter).grid(row=0, column=5, padx=2, pady=2)
         
-        # Create notebook for tabbed panels
         notebook = ttk.Notebook(main_frame)
-        notebook.grid(row=3, column=0, sticky="ew", pady=5)
+        notebook.grid(row=3, column=0, sticky="nsew", pady=5)
         
-        # Create marker info panel
         self.marker_info_frame = ttk.Frame(notebook)
         notebook.add(self.marker_info_frame, text="Marker Info")
         
-        self.marker_info_text = tk.Text(self.marker_info_frame, height=8, wrap=tk.WORD)
-        self.marker_info_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.marker_info_text = tk.Text(self.marker_info_frame, height=5, wrap=tk.WORD)
+        self.marker_info_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=2)
         
         # Create statistics panel
         self.stats_panel = StatisticsPanel(notebook)
@@ -137,6 +141,8 @@ class MainWindow:
         # Connect event handlers
         self.fig.canvas.mpl_connect('button_press_event', self.on_click)
         self.fig.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
+        
+        self.root.bind("<Configure>", self.on_window_resize)
     
     def create_menu(self):
         """Create the application menu."""
@@ -227,11 +233,16 @@ class MainWindow:
         
         ttk.Button(controls_frame, text="Select All", command=self.show_all_tasks).pack(side=tk.LEFT, padx=5)
         ttk.Button(controls_frame, text="Select None", command=self.hide_all_tasks).pack(side=tk.LEFT, padx=5)
-        ttk.Button(controls_frame, text="Apply", command=self.update_plot).pack(side=tk.LEFT, padx=5)
+        ttk.Button(controls_frame, text="Apply", command=self.apply_task_filter).pack(side=tk.LEFT, padx=5)
         
-        # Create scrollable frame for checkboxes
-        canvas = tk.Canvas(self.filter_tab)
-        scrollbar = ttk.Scrollbar(self.filter_tab, orient=tk.VERTICAL, command=canvas.yview)
+        checkbox_container = ttk.Frame(self.filter_tab)
+        checkbox_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        checkbox_container.columnconfigure(0, weight=1)
+        checkbox_container.rowconfigure(0, weight=1)
+        
+        canvas = tk.Canvas(checkbox_container, borderwidth=0, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(checkbox_container, orient=tk.VERTICAL, command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
         
         scrollable_frame.bind(
@@ -239,11 +250,12 @@ class MainWindow:
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
         
-        canvas.create_window((0, 0), window=scrollable_frame, anchor=tk.NW)
         canvas.configure(yscrollcommand=scrollbar.set)
         
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=5)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor=tk.NW, width=canvas.winfo_width())
         
         # Create checkboxes for each task
         self.task_vars = {}
@@ -252,7 +264,8 @@ class MainWindow:
         for i, task in enumerate(unique_tasks):
             var = tk.BooleanVar(value=True)
             self.task_vars[task] = var
-            cb = ttk.Checkbutton(scrollable_frame, text=task, variable=var)
+            
+            cb = ttk.Checkbutton(scrollable_frame, text=task, variable=var, width=25)
             cb.grid(row=i, column=0, sticky=tk.W, padx=5, pady=2)
             
             # Add a color indicator
@@ -264,7 +277,16 @@ class MainWindow:
             except:
                 # For simplicity, we'll just ignore style errors here
                 pass
-    
+        
+        canvas.bind('<Configure>', lambda e: canvas.itemconfig(canvas.find_all()[0], width=e.width-4) if canvas.find_all() else None)
+        
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        scrollable_frame.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        scrollable_frame.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+        
     def show_all_tasks(self):
         """Select all tasks in the filter."""
         for var in self.task_vars.values():
@@ -275,10 +297,59 @@ class MainWindow:
         for var in self.task_vars.values():
             var.set(False)
     
-    def update_plot(self):
+    def apply_task_filter(self):
+        """Apply task visibility filter."""
+        if self.data_manager.df is None or self.data_manager.df.empty:
+            return
+            
+        # Store current view and marker positions
+        xlim = self.ax.get_xlim()
+        ylim = self.ax.get_ylim()
+        marker1_pos = self.data_manager.marker1_pos
+        marker2_pos = self.data_manager.marker2_pos
+        
+        # Clear current figure to prevent overlapping plots
+        self.fig.clear()
+        self.ax = self.fig.add_subplot(111)
+        
+        self.plot_manager.ax = self.ax
+        
+        visible_tasks = [task for task, var in self.task_vars.items() if var.get()]
+        
+        # Get time filter if active
+        time_filter = None
+        if self.time_filter_active and self.time_filter_start is not None and self.time_filter_end is not None:
+            time_filter = (self.time_filter_start, self.time_filter_end)
+        
+        self.plot_manager.update_plot(visible_tasks, time_filter)
+        
+        # Restore view limits
+        self.ax.set_xlim(xlim)
+        self.ax.set_ylim(ylim)
+        
+        # Restore markers if they existed
+        self.data_manager.marker1_pos = marker1_pos
+        self.data_manager.marker2_pos = marker2_pos
+        
+        # If markers exist, update them
+        if marker1_pos is not None or marker2_pos is not None:
+            self.update_markers(xlim, ylim)
+        
+        self.fig.canvas.mpl_connect('button_press_event', self.on_click)
+        self.fig.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
+        
+        self.canvas.draw()
+        
+        self.status_var.set("Task filter applied")
+    
+    def update_plot(self, preserve_view=False, xlim=None, ylim=None):
         """Update the plot with current data and settings."""
         if self.data_manager.df is None or self.data_manager.df.empty:
             return
+        
+        if preserve_view and xlim is None and ylim is None:
+            xlim = self.ax.get_xlim()
+            ylim = self.ax.get_ylim()
         
         # Get visible tasks based on checkboxes
         visible_tasks = [task for task, var in self.task_vars.items() if var.get()]
@@ -288,14 +359,84 @@ class MainWindow:
         if self.time_filter_active and self.time_filter_start is not None and self.time_filter_end is not None:
             time_filter = (self.time_filter_start, self.time_filter_end)
         
+        # Clear the figure completely before rerender to prevent overlapping plots
+        self.fig.clear()
+        self.ax = self.fig.add_subplot(111)
+        
+        self.plot_manager.ax = self.ax
+        
         # Update the plot
         self.plot_manager.update_plot(visible_tasks, time_filter)
         
+        if preserve_view and xlim is not None and ylim is not None:
+            self.ax.set_xlim(xlim)
+            self.ax.set_ylim(ylim)
+        
         # Update the canvas
-        self.fig.tight_layout()
+        self.fig.set_size_inches(10, 5, forward=True)
         self.canvas.draw()
         
-        # Update marker info
+        self.fig.canvas.mpl_connect('button_press_event', self.on_click)
+        self.fig.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
+        
+        self.update_marker_info()
+    
+    def update_markers(self, xlim, ylim):
+        """
+        Update only the markers without redrawing the entire plot.
+        
+        Args:
+            xlim (tuple): The x-axis limits to preserve
+            ylim (tuple): The y-axis limits to preserve
+        """
+        for line in self.ax.lines[:]:
+            if getattr(line, 'is_marker', False):
+                line.remove()
+        
+        for patch in self.ax.patches[:]:
+            if getattr(patch, 'is_marker_shading', False):
+                patch.remove()
+                
+        for text in self.ax.texts[:]:
+            if getattr(text, 'is_marker_label', False):
+                text.remove()
+        
+        # Draw markers
+        visible_tasks = [task for task, var in self.task_vars.items() if var.get()]
+        
+        if self.data_manager.marker1_pos is not None:
+            # Add marker 1 line and label
+            line1 = self.ax.axvline(self.data_manager.marker1_pos, color='magenta', 
+                                   linestyle='-', linewidth=2)
+            line1.is_marker = True
+            
+            text1 = self.ax.text(self.data_manager.marker1_pos, len(visible_tasks) - 0.5, 
+                        f'M1: {self.data_manager.marker1_pos:.3f} ms', 
+                        color='magenta', verticalalignment='bottom')
+            text1.is_marker_label = True
+        
+        if self.data_manager.marker2_pos is not None:
+            # Add marker 2 line and label
+            line2 = self.ax.axvline(self.data_manager.marker2_pos, color='yellow', 
+                                   linestyle='-', linewidth=2)
+            line2.is_marker = True
+            
+            text2 = self.ax.text(self.data_manager.marker2_pos, len(visible_tasks) - 0.5, 
+                        f'M2: {self.data_manager.marker2_pos:.3f} ms', 
+                        color='red', verticalalignment='bottom')
+            text2.is_marker_label = True
+        
+        # Add shaded region ONLY if both markers are set
+        if self.data_manager.marker1_pos is not None and self.data_manager.marker2_pos is not None:
+            x0, x1 = sorted([self.data_manager.marker1_pos, self.data_manager.marker2_pos])
+            patch = self.ax.axvspan(x0, x1, alpha=0.2, color='purple')
+            patch.is_marker_shading = True
+        
+        self.ax.set_xlim(xlim)
+        self.ax.set_ylim(ylim)
+        
+        self.canvas.draw_idle()
+        
         self.update_marker_info()
     
     def update_marker_info(self):
@@ -320,18 +461,24 @@ class MainWindow:
             if self.active_marker == 0:
                 return  # No active marker
             elif self.active_marker == 1:
+                # Store current view limits
+                xlim = self.ax.get_xlim()
+                ylim = self.ax.get_ylim()
+                
                 self.data_manager.set_marker(1, event.xdata)
                 self.status_var.set(f"Marker 1 set at {event.xdata:.3f} ms")
-                # Auto-switch to marker 2 if marker 1 was just set
-                # if self.data_manager.marker2_pos is None:
-                #     self.active_marker = 2
                 self.active_marker = 0  # Reset active marker after setting
+                
+                self.update_markers(xlim, ylim)
             else:
+                xlim = self.ax.get_xlim()
+                ylim = self.ax.get_ylim()
+                
                 self.data_manager.set_marker(2, event.xdata)
                 self.status_var.set(f"Marker 2 set at {event.xdata:.3f} ms")
                 self.active_marker = 0  # Reset active marker after setting
-            
-            self.update_plot()
+                
+                self.update_markers(xlim, ylim)
     
     def on_mouse_move(self, event):
         """
@@ -356,10 +503,29 @@ class MainWindow:
     
     def clear_markers(self):
         """Clear all markers."""
+        xlim = self.ax.get_xlim()
+        ylim = self.ax.get_ylim()
+        
         self.data_manager.marker1_pos = None
         self.data_manager.marker2_pos = None
         self.active_marker = 0
-        self.update_plot()
+        
+        for line in self.ax.lines[:]:
+            if getattr(line, 'is_marker', False):
+                line.remove()
+        
+        for patch in self.ax.patches[:]:
+            if getattr(patch, 'is_marker_shading', False):
+                patch.remove()
+        
+        for text in self.ax.texts[:]:
+            if getattr(text, 'is_marker_label', False):
+                text.remove()
+        
+        self.canvas.draw_idle()
+        
+        self.update_marker_info()
+        
         self.status_var.set("Markers cleared")
     
     def zoom_to_markers(self):
@@ -367,8 +533,11 @@ class MainWindow:
         if self.data_manager.marker1_pos is not None and self.data_manager.marker2_pos is not None:
             x0, x1 = sorted([self.data_manager.marker1_pos, self.data_manager.marker2_pos])
             padding = (x1 - x0) * 0.1  # Add 10% padding
+            
+            # Set the x-axis limits directly to zoom to the markers
             self.ax.set_xlim(x0 - padding, x1 + padding)
-            self.canvas.draw()
+            
+            self.canvas.draw_idle()
             self.status_var.set(f"Zoomed to markers: {x0:.3f} - {x1:.3f} ms")
         else:
             messagebox.showinfo("Info", "Please set both markers first")
@@ -376,10 +545,19 @@ class MainWindow:
     def reset_view(self):
         """Reset the plot view to show all data."""
         if self.data_manager.df is not None and not self.data_manager.df.empty:
-            min_time, max_time = self.data_manager.time_range
-            padding = (max_time - min_time) * 0.05
-            self.ax.set_xlim(min_time - padding, max_time + padding)
-            self.canvas.draw()
+            marker1_pos = self.data_manager.marker1_pos
+            marker2_pos = self.data_manager.marker2_pos
+
+            self.update_plot()
+            
+            self.data_manager.marker1_pos = marker1_pos
+            self.data_manager.marker2_pos = marker2_pos
+            
+            if marker1_pos is not None or marker2_pos is not None:
+                xlim = self.ax.get_xlim()
+                ylim = self.ax.get_ylim()
+                self.update_markers(xlim, ylim)
+            
             self.status_var.set("View reset")
     
     def apply_time_filter(self):
@@ -393,10 +571,38 @@ class MainWindow:
                     messagebox.showerror("Error", "Start time must be less than end time")
                     return
                 
+                marker1_pos = self.data_manager.marker1_pos
+                marker2_pos = self.data_manager.marker2_pos
+                
                 self.time_filter_active = True
                 self.time_filter_start = start_time
                 self.time_filter_end = end_time
-                self.update_plot()
+
+                self.fig.clear()
+                self.ax = self.fig.add_subplot(111)  # Recreate the axes
+                
+                self.plot_manager.ax = self.ax
+                
+                visible_tasks = [task for task, var in self.task_vars.items() if var.get()]
+                
+                time_filter = (self.time_filter_start, self.time_filter_end)
+                
+                self.plot_manager.update_plot(visible_tasks, time_filter)
+                
+                padding = (end_time - start_time) * 0.05
+                self.ax.set_xlim(start_time - padding, end_time + padding)
+                
+                self.data_manager.marker1_pos = marker1_pos
+                self.data_manager.marker2_pos = marker2_pos
+                
+                if marker1_pos is not None or marker2_pos is not None:
+                    self.update_markers(self.ax.get_xlim(), self.ax.get_ylim())
+                
+                self.fig.canvas.mpl_connect('button_press_event', self.on_click)
+                self.fig.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
+                
+                self.canvas.draw()
+                
                 self.status_var.set(f"Time filter applied: {start_time:.3f} - {end_time:.3f} ms")
             else:
                 messagebox.showerror("Error", "Please enter both start and end times")
@@ -405,12 +611,37 @@ class MainWindow:
     
     def reset_time_filter(self):
         """Reset the time filter."""
+        xlim = self.ax.get_xlim()
+        ylim = self.ax.get_ylim()
+        marker1_pos = self.data_manager.marker1_pos
+        marker2_pos = self.data_manager.marker2_pos
+        
         self.time_filter_active = False
         self.time_filter_start = None
         self.time_filter_end = None
         self.time_start_var.set("")
         self.time_end_var.set("")
-        self.update_plot()
+        
+        self.fig.clear()
+        self.ax = self.fig.add_subplot(111)
+        
+        self.plot_manager.ax = self.ax
+        
+        visible_tasks = [task for task, var in self.task_vars.items() if var.get()]
+        
+        self.plot_manager.update_plot(visible_tasks, None)
+        
+        self.data_manager.marker1_pos = marker1_pos
+        self.data_manager.marker2_pos = marker2_pos
+        
+        if marker1_pos is not None or marker2_pos is not None:
+            self.update_markers(self.ax.get_xlim(), self.ax.get_ylim())
+        
+        self.fig.canvas.mpl_connect('button_press_event', self.on_click)
+        self.fig.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
+        
+        self.canvas.draw()
+        
         self.status_var.set("Time filter reset")
     
     def export_statistics(self):
@@ -512,3 +743,20 @@ class MainWindow:
             "- Task filtering and searching\n"
             "- Statistics and data export"
         )
+    
+    def on_window_resize(self, event):
+        """Handle window resize events to maintain layout proportions."""
+        # Only process if this is the root window being resized
+        if event.widget == self.root:
+            width = event.width
+            height = event.height
+            
+            plot_height = int(height * 0.6)
+            
+            # Set minimum heights
+            self.canvas_widget.config(height=plot_height)
+            
+            # Also adjust the figure size for matplotlib
+            self.fig.set_size_inches(width/100, plot_height/100, forward=True)
+            
+            self.canvas.draw()

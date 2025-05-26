@@ -5,6 +5,15 @@ Trace Data Viewer for FreeRTOS, based on TimeDoctor - Main entry point
 
 import argparse
 import os
+import sys
+import platform
+
+# Configure matplotlib backend before importing any matplotlib modules
+# This helps prevent the autorelease pool corruption on macOS
+import matplotlib
+if platform.system() == 'Darwin':  # macOS
+    matplotlib.use('TkAgg')  # Force TkAgg backend which is more stable on macOS
+
 import tkinter as tk
 from trace_data_viewer.ui.main_window import MainWindow
 from trace_data_viewer.data_manager import DataManager

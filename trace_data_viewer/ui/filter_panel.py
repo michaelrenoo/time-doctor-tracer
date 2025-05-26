@@ -29,4 +29,4 @@ class FilterPanel:
                    command=self.main_window.hide_all_tasks).grid(row=0, column=1, padx=5, pady=5)
         
         ttk.Button(self.frame, text="Apply Filter", 
-                   command=self.main_window.update_plot).grid(row=0, column=2, padx=5, pady=5)
+                   command=self.main_window.apply_task_filter).grid(row=0, column=2, padx=5, pady=5)

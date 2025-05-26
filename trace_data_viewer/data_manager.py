@@ -39,7 +39,9 @@ class DataManager:
         with open(filename) as f:
             lines = f.readlines()
         
-        t_start = None
+        task_start_times = {}
+        active_tasks = set()
+        
         for line in lines:
             tokens = line.strip().split()
             if not tokens:
@@ -52,20 +54,44 @@ class DataManager:
                 self.task_names[task_id] = " ".join(tokens[3:])
             elif tokens[1] == "TI":
                 task_id = int(tokens[2])
-                t_start = int(tokens[0]) * 1000 / self.system_core_clock  # in ms
+                timestamp = int(tokens[0]) * 1000 / self.system_core_clock  # in ms
+                task_start_times[task_id] = timestamp
+                active_tasks.add(task_id)
             elif tokens[1] == "TO":
                 task_id = int(tokens[2])
-                t_end = int(tokens[0]) * 1000 / self.system_core_clock  # in ms
-                if t_start is None:
-                    continue
+                timestamp = int(tokens[0]) * 1000 / self.system_core_clock  # in ms
+                
+                if task_id in task_start_times and task_id in active_tasks:
+                    t_start = task_start_times[task_id]
+                    t_end = timestamp
+                    
+                    # Create a task event entry
+                    self.events.append({
+                        "Task ID": task_id,
+                        "Task Name": self.task_names.get(task_id, f"Task {task_id}"),
+                        "Start (ms)": float(t_start),
+                        "End (ms)": float(t_end),
+                        "Duration (ms)": round(float(t_end - t_start), 3)
+                    })
+                    active_tasks.remove(task_id)
+        
+        # Handle any tasks that never got a TO event (end of trace)
+        for task_id in active_tasks:
+            if task_id in task_start_times:
+                # Use the last timestamp as end time if the task is still active
+                if self.events:
+                    last_event_time = max(event["End (ms)"] for event in self.events)
+                else:
+                    # If no events, just add 1ms to start time
+                    last_event_time = task_start_times[task_id] + 1
+                
                 self.events.append({
                     "Task ID": task_id,
                     "Task Name": self.task_names.get(task_id, f"Task {task_id}"),
-                    "Start (ms)": float(t_start),
-                    "End (ms)": float(t_end),
-                    "Duration (ms)": round(float(t_end - t_start), 3)
+                    "Start (ms)": float(task_start_times[task_id]),
+                    "End (ms)": float(last_event_time),
+                    "Duration (ms)": round(float(last_event_time - task_start_times[task_id]), 3)
                 })
-                t_start = None
         
         if task_filter:
             task_ids = set(map(int, task_filter.split(',')))

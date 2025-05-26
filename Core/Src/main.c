@@ -211,6 +211,11 @@ void StartTracerTask(void *argument) {
     #if MAIN_DEBUG
       const char* msg = "\r\n----- TRACER STARTING -----\r\n";
       HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+      
+      char debug[100];
+      snprintf(debug, sizeof(debug), "Tracer config: Buffer size=%d, Event size=%lu bytes\r\n", 
+               TRACE_BUFFER_SIZE, sizeof(trace_event_t));
+      HAL_UART_Transmit(&huart2, (uint8_t*)debug, strlen(debug), HAL_MAX_DELAY);
     #endif
     
     // Initialize the tracer
@@ -220,15 +225,37 @@ void StartTracerTask(void *argument) {
     tracer_debug_buffer();
     
     #if MAIN_DEBUG
+      // Manually log some events
+      tracer_log(TRACE_EVENT_TI, 0xBEEF, NULL);
+      tracer_log(TRACE_EVENT_TO, 0xBEEF, NULL);
+      
+      snprintf(debug, sizeof(debug), "Added test events. Count now: %lu\r\n", trace_count);
+      HAL_UART_Transmit(&huart2, (uint8_t*)debug, strlen(debug), HAL_MAX_DELAY);
+      
       // Clear separator before binary data starts
       msg = "\r\n----- BINARY DATA FOLLOWS -----\r\n";
       HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
     #endif
     
+    tracer_send_events();
+    
     // Main loop
+    uint32_t iteration = 0;
     for(;;) {
+        iteration++;
+        
         // Process trace data - this will handle sending events
         tracer_process();
+        
+        // Every 50 iterations, force a dump all events
+        if (iteration % 50 == 0) {
+            #if MAIN_DEBUG
+                snprintf(debug, sizeof(debug), "Forcing event dump. Count: %lu\r\n", trace_count);
+                HAL_UART_Transmit(&huart2, (uint8_t*)debug, strlen(debug), HAL_MAX_DELAY);
+            #endif
+            
+            tracer_send_events();
+        }
         
         // Delay 10ms between processing cycles
         osDelay(10);

@@ -2,7 +2,7 @@
  * tracer.h
  *
  *  Created on: Jan 10, 2023
- *  Updated on: May 24, 2025
+ *  Updated on: May 27, 2025
  *      Author: live, Michael Reno
  */
 
@@ -18,7 +18,7 @@
 #define TRACE_BUFFER_SIZE 1024  // Rolling buffer size for trace records
 #define TRACE_MAGIC "RENO"      // Magic header for log file
 #define TRACE_VERSION 1
-#define TRACER_DEBUG 1          // Set to 0 to disable verbose debug messages
+#define TRACER_DEBUG 0          // Set to 0 to disable verbose debug messages
 
 // Trace events enum
 // TODO: Add more events for more FreeRTOS events/macros
@@ -251,6 +251,13 @@ static void tracer_init()
  */
 static void tracer_send_events()
 {
+    #if TRACER_DEBUG
+    char debug[100];
+    snprintf(debug, sizeof(debug), "tracer_send_events: count=%lu, index=%lu\r\n", 
+             trace_count, trace_index);
+    HAL_UART_Transmit(&huart2, (uint8_t *)debug, strlen(debug), HAL_MAX_DELAY);
+    #endif
+
     if (trace_count == 0)
     {
         #if TRACER_DEBUG
@@ -260,8 +267,9 @@ static void tracer_send_events()
         return;
     }
 
-    // Calculate events to send
-    uint32_t events_to_send = (trace_count > 5) ? 5 : trace_count;
+    // Calculate events to send at once
+    uint32_t max_events_per_batch = 8;
+    uint32_t events_to_send = (trace_count > max_events_per_batch) ? max_events_per_batch : trace_count;
     uint16_t data_length = events_to_send * sizeof(trace_event_t);
 
     #if TRACER_DEBUG
@@ -290,18 +298,23 @@ static void tracer_send_events()
     uint32_t start_idx;
     if (trace_count >= TRACE_BUFFER_SIZE)
     {
-        // Buffer is full, start at the oldest entry
+        // Buffer is full, the oldest entry is at the next position to be overwritten
         start_idx = trace_index;
+    }
+    else if (last_sent_index < trace_index)
+    {
+        // Not wrapped around yet, start from last_sent_index
+        start_idx = last_sent_index;
     }
     else
     {
-        // Buffer is not full, oldest event is at index 0
+        // All data up to the end of buffer and wrapped around
         start_idx = 0;
     }
 
     #if TRACER_DEBUG
-        snprintf(debug, sizeof(debug), "Buffer: count=%lu, start_idx=%lu, index=%lu\r\n", 
-                trace_count, start_idx, trace_index);
+        snprintf(debug, sizeof(debug), "Buffer: count=%lu, start_idx=%lu, index=%lu, last_sent=%lu\r\n", 
+                trace_count, start_idx, trace_index, last_sent_index);
         HAL_UART_Transmit(&huart2, (uint8_t*)debug, strlen(debug), HAL_MAX_DELAY);
     #endif
 
@@ -356,20 +369,26 @@ static void tracer_send_events()
         }
     #endif
 
+    if (status != HAL_OK)
+    {
+        return;
+    }
+
     // Update statistics
     sent_events += events_to_send;
     packet_sequence++;
 
+    // Update the last sent index - we sent events from start_idx to start_idx+events_to_send-1
+    last_sent_index = (start_idx + events_to_send) % TRACE_BUFFER_SIZE;
+
     // Update trace count
-    if (events_to_send >= trace_count)
+    if (trace_count >= events_to_send)
     {
-        trace_count = 0;
-        last_sent_index = trace_index;
+        trace_count -= events_to_send;
     }
     else
     {
-        trace_count -= events_to_send;
-        last_sent_index = (start_idx + events_to_send) % TRACE_BUFFER_SIZE;
+        trace_count = 0;
     }
 
     #if TRACER_DEBUG
@@ -410,6 +429,22 @@ static void tracer_process()
         packet[7] = (heartbeat_counter >> 8) & 0xFF;
 
         HAL_UART_Transmit(&huart2, packet, 8, HAL_MAX_DELAY);
+        
+        // Resend CC every 5 seconds
+        if (counter % 500 == 0) {
+            tracer_log(TRACE_EVENT_CC, SystemCoreClock, NULL);
+            
+            #if TRACER_DEBUG
+                char debug[60];
+                snprintf(debug, sizeof(debug), "Periodic CC event added (counter=%lu)\r\n", counter);
+                HAL_UART_Transmit(&huart2, (uint8_t *)debug, strlen(debug), HAL_MAX_DELAY);
+            #endif
+        }
+    }
+
+    if (trace_count > 0)
+    {
+        tracer_send_events();
     }
 
     #if TRACER_DEBUG
@@ -429,7 +464,7 @@ static void tracer_process()
     #endif
 
     // Send events every 10 iterations (100ms) if available
-    if (trace_count > 0 && (counter % 100 == 0))
+    if (trace_count > 0)
     {
         #if TRACER_DEBUG
             char debug[60];
@@ -453,7 +488,10 @@ static void tracer_process()
     #endif
 }
 
-// FreeRTOS trace hook macros
+/**
+ * @brief Debug output for FreeRTOS hooks to confirm they're being called
+ * Called by FreeRTOS when a task is created
+ */
 __STATIC_INLINE void tracer_TASK_CREATE(uint32_t uxTaskNumber, char *taskName)
 {
     tracer_init();
@@ -467,6 +505,9 @@ __STATIC_INLINE void tracer_TASK_CREATE(uint32_t uxTaskNumber, char *taskName)
     #endif
 
     tracer_log(TRACE_EVENT_TC, uxTaskNumber, taskName);
+    
+    // Force sending events now - don't wait for the tracer task
+    tracer_send_events();
 }
 
 __STATIC_INLINE void tracer_TASK_SWITCHED_IN(uint32_t uxTaskNumber)
@@ -479,6 +520,11 @@ __STATIC_INLINE void tracer_TASK_SWITCHED_IN(uint32_t uxTaskNumber)
     #endif
 
     tracer_log(TRACE_EVENT_TI, uxTaskNumber, NULL);
+    
+    // Only force send if buffer is nearly full
+    if (trace_count > 3 || trace_count > (TRACE_BUFFER_SIZE - 5)) {
+        tracer_send_events();
+    }
 }
 
 __STATIC_INLINE void tracer_TASK_SWITCHED_OUT(uint32_t uxTaskNumber)
@@ -491,6 +537,10 @@ __STATIC_INLINE void tracer_TASK_SWITCHED_OUT(uint32_t uxTaskNumber)
     #endif
 
     tracer_log(TRACE_EVENT_TO, uxTaskNumber, NULL);
+    
+    // Only force send if buffer is nearly full
+    if (trace_count > 3 || trace_count > (TRACE_BUFFER_SIZE - 5)) {
+        tracer_send_events();
+    }
 }
-
 #endif /* INC_TRACER_H_ */

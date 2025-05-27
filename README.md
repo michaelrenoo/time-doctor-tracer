@@ -112,7 +112,7 @@ The Trace Data Viewer provides an interactive GUI with the following features:
 - Data export options
 
 Example logfiles:
-- trace_data.log
+- tasks_in_out.log
 - logfile
 
 #### Example:
@@ -122,15 +122,15 @@ Example logfiles:
 ## Older Viewers
 
 Previous versions of the viewer are still available:
+- `viewer3.py`: Plotly/Dash-based viewer
 - `viewer2.py`: Plotly-based viewer
+- `time_doctor_viewer.py`: Matplotlib's Pyplot-based viewer
 - Other viewer files in the repository
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## TODOs
-- Improve README with more info on TimeDoctor and tracing tool
-- Maybe include explanation on how to incorporate the tracing tool on other FreeRTOS projects
-- Format of log file? Or the binary?
-- Output, common issues, etc
+## Limitations and Constraints
+
+This project was created as part of my Master's thesis to improve and expand on the functionality of [TimeDoctor tool](https://sourceforge.net/projects/timedoctor/) for RTOS event visualization.

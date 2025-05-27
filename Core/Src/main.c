@@ -24,6 +24,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include "tracer.h"
+#include "config/tracer_config.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,7 +34,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define MAIN_DEBUG 1  // Set to 0 to disable debug messages
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/

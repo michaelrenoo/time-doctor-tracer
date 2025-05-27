@@ -13,15 +13,9 @@
 #include <stdint.h>
 #include <string.h>
 #include "stm32l4xx_hal.h"
-
-// Configuration
-#define TRACE_BUFFER_SIZE 1024  // Rolling buffer size for trace records
-#define TRACE_MAGIC "RENO"      // Magic header for log file
-#define TRACE_VERSION 1
-#define TRACER_DEBUG 0          // Set to 0 to disable verbose debug messages
+#include "config/tracer_config.h" // Include the new configuration file
 
 // Trace events enum
-// TODO: Add more events for more FreeRTOS events/macros
 typedef enum
 {
     TRACE_EVENT_CC, // Clock Calibration
@@ -268,8 +262,7 @@ static void tracer_send_events()
     }
 
     // Calculate events to send at once
-    uint32_t max_events_per_batch = 8;
-    uint32_t events_to_send = (trace_count > max_events_per_batch) ? max_events_per_batch : trace_count;
+    uint32_t events_to_send = (trace_count > MAX_EVENTS_PER_BATCH) ? MAX_EVENTS_PER_BATCH : trace_count;
     uint16_t data_length = events_to_send * sizeof(trace_event_t);
 
     #if TRACER_DEBUG
@@ -282,16 +275,16 @@ static void tracer_send_events()
     #endif
 
     // Create a buffer for header + all events
-    uint8_t packet_buffer[8 + (5 * sizeof(trace_event_t))];
+    uint8_t packet_buffer[8 + (MAX_EVENTS_PER_BATCH * sizeof(trace_event_t))];
     memset(packet_buffer, 0, sizeof(packet_buffer));
 
     // Header
-    packet_buffer[0] = 'R';
-    packet_buffer[1] = 'E';
-    packet_buffer[2] = 'N';
-    packet_buffer[3] = 'O';
+    packet_buffer[0] = TRACE_MAGIC[0];
+    packet_buffer[1] = TRACE_MAGIC[1];
+    packet_buffer[2] = TRACE_MAGIC[2];
+    packet_buffer[3] = TRACE_MAGIC[3];
     packet_buffer[4] = TRACE_VERSION;
-    packet_buffer[5] = 0x02;                      // Events packet
+    packet_buffer[5] = EVENTS_PACKET_TYPE;        // Events packet
     packet_buffer[6] = data_length & 0xFF;        // LSB
     packet_buffer[7] = (data_length >> 8) & 0xFF; // MSB
 
@@ -408,20 +401,19 @@ static void tracer_process()
     static uint32_t counter = 0;
     counter++;
 
-    // Send heartbeat every 50 iterations (500ms at 10ms task delay)
-    if (counter % 50 == 0)
+    if (counter % HEARTBEAT_INTERVAL == 0)
     {
         uint8_t packet[8] = {0};
 
         // Magic header
-        packet[0] = 'R';
-        packet[1] = 'E';
-        packet[2] = 'N';
-        packet[3] = 'O';
+        packet[0] = TRACE_MAGIC[0];
+        packet[1] = TRACE_MAGIC[1];
+        packet[2] = TRACE_MAGIC[2];
+        packet[3] = TRACE_MAGIC[3];
 
         // Version and type
         packet[4] = TRACE_VERSION;
-        packet[5] = 0x42; // Heartbeat marker
+        packet[5] = HEARTBEAT_PACKET_TYPE;
 
         // 16-bit counter value
         uint16_t heartbeat_counter = counter;
@@ -430,8 +422,7 @@ static void tracer_process()
 
         HAL_UART_Transmit(&huart2, packet, 8, HAL_MAX_DELAY);
         
-        // Resend CC every 5 seconds
-        if (counter % 500 == 0) {
+        if (counter % CLOCK_CALIB_INTERVAL == 0) {
             tracer_log(TRACE_EVENT_CC, SystemCoreClock, NULL);
             
             #if TRACER_DEBUG
